@@ -21,6 +21,12 @@ services:
       # Replace with your ZimaOS host IP and the mapped frontend port below.
       # Comma-separate to allow more than one origin (e.g. IP + hostname).
       FRONTEND_URL: http://CHANGE-ME-HOST-IP:6767
+      # Keep "false" for plain-HTTP LAN access. If left "true" (upstream
+      # default) AND any FRONTEND_URL entry is https://, the backend
+      # redirects every request to that https host — which breaks if you
+      # are not actually terminating TLS on that port (ERR_SSL_PROTOCOL_ERROR).
+      # Only set "true" behind a reverse proxy that really serves https.
+      ENFORCE_HTTPS_REDIRECT: "false"
       # Only enable behind a trusted reverse proxy that sanitizes headers.
       TRUST_PROXY: "false"
       # Fix these to random strings so tokens survive a redeploy / host move.
@@ -111,6 +117,9 @@ x-casaos:
         mismatch` and you cannot use the app at all. If you remap the host
         port (e.g. `6768:80`), put that same port here. Comma-separate to
         allow several origins: `http://192.168.1.50:6767,http://excalidash.lan`.
+        Do NOT add an `https://` entry unless you actually terminate TLS on
+        that port — with `ENFORCE_HTTPS_REDIRECT=true` an https origin makes
+        the backend redirect everything to https and breaks plain-HTTP access.
 
         **Set secrets before first start (recommended):**
         Generate two random values and set `JWT_SECRET` and `CSRF_SECRET`:
