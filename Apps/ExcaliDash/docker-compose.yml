@@ -1,0 +1,132 @@
+name: excalidash
+
+networks:
+  excalidash-network:
+    driver: bridge
+
+services:
+  backend:
+    image: zimengxiong/excalidash-backend:v0.5.1
+    restart: unless-stopped
+    networks:
+      - excalidash-network
+    environment:
+      DATABASE_PROVIDER: sqlite
+      DATABASE_URL: file:/app/prisma/dev.db
+      PORT: "8000"
+      NODE_ENV: production
+      AUTH_MODE: local
+      # Only enable behind a trusted reverse proxy that sanitizes headers.
+      TRUST_PROXY: "false"
+      # Fix these to random strings so tokens survive a redeploy / host move.
+      # If left empty, the backend auto-generates and persists them in the
+      # volume — but they are then tied to that volume only.
+      #   openssl rand -hex 32
+      JWT_SECRET: change-me-to-a-random-32-byte-hex-string
+      CSRF_SECRET: change-me-to-another-random-32-byte-hex-string
+      # --- OIDC (only if AUTH_MODE is hybrid or oidc_enforced) ---
+      # OIDC_PROVIDER_NAME: ""
+      # OIDC_ISSUER_URL: ""
+      # OIDC_CLIENT_ID: ""
+      # OIDC_CLIENT_SECRET: ""
+      # OIDC_REDIRECT_URI: ""
+    volumes:
+      - /DATA/AppData/excalidash/data:/app/prisma
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    image: zimengxiong/excalidash-frontend:v0.5.1
+    restart: unless-stopped
+    networks:
+      - excalidash-network
+    depends_on:
+      - backend
+    ports:
+      - "6767:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: frontend
+  author: sergio.sousa
+  developer: ZimengXiong
+  category: Productivity
+  icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/excalidash.png
+  title:
+    custom: ExcaliDash
+    en_us: ExcaliDash
+  description:
+    en_us: |
+      ExcaliDash is a self-hosted dashboard and organizer for Excalidraw. It
+      adds a real server-side backend — database persistence, real-time
+      collaboration, and multi-user authentication — on top of the original
+      Excalidraw editor, which by itself is a pure stateless client.
+
+      The official `excalidraw/excalidraw` image is only the static client:
+      every drawing lives in the browser's localStorage/IndexedDB. Clearing
+      browser data, switching devices, or changing domains loses the drawing,
+      because no copy ever existed on the server. ExcaliDash fixes this with
+      true persistent storage (SQLite by default via Prisma, PostgreSQL
+      optional) outside the browser.
+
+      Key features:
+      - Persistent storage of drawings, independent of any browser
+      - Organize drawings into collections, with search
+      - Automatic snapshot retention: version history and restore
+      - Real-time collaboration between multiple users
+      - Authentication: local and/or OIDC (Authentik, Keycloak, Dex)
+      - Export/import for backup
+
+      License: AGPL-3.0. Original project by ZimengXiong.
+  tagline:
+    en_us: Self-hosted Excalidraw with real persistence and collaboration
+  port_map: "6767"
+  index: /
+  store_app_id: excalidash
+  tips:
+    before_install:
+      en_us: |
+        **BETA project, single maintainer.** Back up your data regularly
+        (the volume at `/DATA/AppData/excalidash/data`).
+
+        **Set secrets before first start (recommended):**
+        Generate two random values and set `JWT_SECRET` and `CSRF_SECRET`:
+        ```
+        openssl rand -hex 32
+        ```
+        If left as-is / empty, the backend auto-generates and persists them
+        in the data volume — but they become tied to that volume only, so
+        fix them explicitly if you want redeploy portability.
+
+        **Security / exposure:**
+        Security hardening (CSRF, login rate-limiting, auditing) was added
+        incrementally across releases. Expose this only on your private
+        network / Tailscale — not directly via a public tunnel — until you
+        have validated the current hardening state. Keep `TRUST_PROXY=false`
+        unless you sit behind a trusted reverse proxy that sanitizes headers.
+
+        **Auth modes:** `AUTH_MODE=local` (default), `hybrid`, or
+        `oidc_enforced`. For OIDC, uncomment and set the `OIDC_*` env vars on
+        the backend service (issuer URL, client id/secret, redirect URI).
+
+        **Database:** SQLite by default (file in the data volume). To use
+        PostgreSQL instead, set `DATABASE_PROVIDER=postgresql` and point
+        `DATABASE_URL` at your Postgres instance.
+
+        **Image provenance note:** images are published to Docker Hub manually
+        by the maintainer (no CI build, no SLSA/cosign/SBOM). If that matters
+        to you, build locally from the Dockerfiles in the source repo instead.
+
+        **After installation:**
+        - Open the web UI at `http://[HOST-IP]:6767`
+        - Create your local account (first user), then start drawing
